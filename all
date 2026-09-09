@@ -1,0 +1,213 @@
+LOGIN:
+
+public interface LekarRepository {
+    
+    Lekar login(String kIme, String sifra);
+    Lekar findById(Long id);
+}
+-
+@Repository
+public class LekarJpaRepository implements LekarRepository{
+    
+    @Autowired
+    private final EntityManagerFactory emf;
+
+    public LekarJpaRepository(EntityManagerFactory emf) {
+        this.emf = emf;
+    }
+    @Override
+    public Lekar login(String kIme, String sifra) {
+
+        EntityManager em=emf.createEntityManager();
+        
+        try{
+            return em.createQuery("SELECT l FROM Lekar l WHERE l.kIme=:kIme AND l.sifra=:sifra", Lekar.class)
+                    .setParameter("kIme", kIme).setParameter("sifra", sifra).getSingleResult();
+        }catch(NoResultException e){
+            return null;
+        }
+        finally{
+            em.close();
+        }
+    }
+
+    @Override
+    public Lekar findById(Long id) {
+
+        EntityManager em=emf.createEntityManager();
+        return em.find(Lekar.class, id);
+    }
+    
+}
+-
+public interface LekarService {
+    LekarDto login(String kIme, String sifra);
+}
+-
+@Component
+public class LekarConverter implements Converter<LekarDto, Lekar>{
+
+    @Override
+    public Lekar toEntity(LekarDto dto) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
+    @Override
+    public LekarDto toDto(Lekar entity) {
+
+        return new LekarDto(entity.getId(), entity.getIme(), entity.getPrezime(), 
+                entity.getSpecijalizacija(), entity.getBrojLicence(), entity.getKIme(), entity.getSifra());
+    }
+    
+}
+-
+@Service
+public class LekarServiceImpl implements LekarService{
+    
+    private final LekarRepository lekarRepository;
+    private final LekarConverter lekarConverter;
+
+    @Autowired
+    public LekarServiceImpl(LekarRepository lekarRepository, LekarConverter lekarConverter) {
+        this.lekarRepository = lekarRepository;
+        this.lekarConverter = lekarConverter;
+    }
+    @Override
+    public LekarDto login(String kIme, String sifra) {
+
+        Lekar l=lekarRepository.login(kIme, sifra);
+        if(l==null){
+            return null;
+        }
+        return lekarConverter.toDto(l);
+    }
+    
+}
+-
+@ComponentScan(basePackages = {"rs.ac.bg.fon.oktobar"})
+public class AppConfig {
+    
+    @Bean("emf")
+    public EntityManagerFactory entityManagerFactory(){
+        return Persistence.createEntityManagerFactory("appPu");
+    }
+}
+-
+<form action="lekar?action=login" method="POST">
+            <label>kIme: </label>
+            <input type="text" name="kIme" value="" />
+            <label>sifra: </label>
+            <input type="password" name="sifra" value="" />
+            <input type="submit" value="login" />
+            <div> ${requestScope.greska}
+            </div>
+        </form>
+- servlet
+    @Autowired
+    @Qualifier("login")
+    private Action loginAction;
+    
+    @Override
+    public void init(ServletConfig config) throws ServletException {
+        super.init(config);
+    
+        ApplicationContext context=(ApplicationContext) config.getServletContext().getAttribute("c");
+        context.getAutowireCapableBeanFactory().autowireBean(this);
+        
+    }
+    protected void processRequest(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        response.setContentType("text/html;charset=UTF-8");
+        
+        String page="/login.jsp";
+        String action =request.getParameter("action");
+        
+        if(action.equals("login")){
+            page=loginAction.execute(request);
+        }
+        
+        request.getRequestDispatcher(page).forward(request, response);
+    }
+-
+
+@WebListener
+public class WebContextListener implements ServletContextListener{
+    
+    public void contextInitialized(ServletContextEvent sce) {
+        
+        ApplicationContext context=new AnnotationConfigApplicationContext(AppConfig.class);
+        sce.getServletContext().setAttribute("c", context);
+    }
+
+    public void contextDestroyed(ServletContextEvent sce) {
+        
+    }
+    
+}
+-
+@Bean("login")
+    public Action loginAction(){
+        return new LoginAction();
+    }
+-
+public class LoginAction implements Action{
+    
+    @Autowired
+    private LekarService lekarService;
+    @Autowired
+    private PacijentService pacijentService;
+
+    @Override
+    public String execute(HttpServletRequest request) {
+
+        String kIme=request.getParameter("kIme");
+        String sifra=request.getParameter("sifra");
+        
+        LekarDto l=lekarService.login(kIme, sifra);
+        if(l==null){
+            request.setAttribute("greska", "ne postoji");
+            return "/login.jsp";
+        }
+        HttpSession session=request.getSession(true);
+        session.setAttribute("k", l);
+        
+        List<LekarDto> ulogovani=(List<LekarDto>) request.getServletContext().getAttribute("u");
+        if(ulogovani==null){
+            ulogovani=new ArrayList<>();
+            request.getServletContext().setAttribute("u", ulogovani);
+        }
+        
+        for (LekarDto lekar : ulogovani) {
+            if(lekar.getId()==l.getId()){
+                request.setAttribute("greska", "vec ulogovan");
+                return "/login.jsp";
+            }
+        }
+        List<PacijentDto> pacijenti=pacijentService.vrati();
+        request.getServletContext().setAttribute("p", pacijenti);
+        
+        ulogovani.add(l);
+        return "WEB-INF/main.jsp";
+    }
+   
+}
+
+
+VRATI:
+public interface PacijentRepository {
+    List<Pacijent> vrati();
+    Pacijent findById(Long id);
+}
+-
+@Repository
+public class PacijentJpaRepository implements PacijentRepository{
+@Autowired
+    private final EntityManagerFactory emf;
+
+    public PacijentJpaRepository(EntityManagerFactory emf) {
+        this.emf = emf;
+    }
+.........
+
+
+
